@@ -1,7 +1,7 @@
 const monent = require('moment-timezone');
 const request = require('request');
 
-const reqURL = `https://hooks.slack.com/services/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`;
+const reqURL = `WEBHOOKURL`;
 
 exports.handler = (event, context, callback) => {
     var timezone = "Asia/Istanbul";
@@ -58,7 +58,7 @@ exports.handler = (event, context, callback) => {
 
     request.post(options, function (error, response, body) {
         if (!error && response.statusCode == 200) {
-          console.log(body.id) // Print the shortened url.
+          console.log(body.id) 
           console.log("body: " + body);
           console.log("Post to slack error: " + error)
         }
