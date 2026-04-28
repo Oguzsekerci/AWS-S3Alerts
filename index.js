@@ -1,71 +1,80 @@
-const monent = require('moment-timezone');
+const moment = require('moment-timezone');
 const request = require('request');
 
-const reqURL = `WEBHOOKURL`;
+// Set your Slack incoming webhook URL here
+const reqURL = `YOUR_SLACK_WEBHOOK_URL`;
 
 exports.handler = (event, context, callback) => {
-    var timezone = "Asia/Istanbul";
-    var objectType ="Upload";
-    var objectKey = event.Records[0].s3.object.key;
-    var objectSize = Number((event.Records[0].s3.object.size / 1024).toFixed(2));
-    var objectUnit = "KB";
-    
-    if(objectSize > 1024) {
-        objectSize = Number((objectSize / 1024).toFixed(2));
-        objectUnit = "MB";
-    }
-    
-    var eventTime = monent.tz(event.Records[0].eventTime, timezone).format("DD/MM/YYYY HH:mm:ss");
-    var bucket = event.Records[0].s3.bucket.name;
-    var attachmentTitle = `New upload :oguzhey:`;
-    var messageTitle = `${objectType} to bucket - ${bucket}`;
-    var messageLevel = "good";
-    var filedValueContext = objectKey + " has been uploaded to bucket successfully on " + eventTime + "\n file size: " + objectSize + " " + objectUnit;
-    
-    var actions = event.Records[0].eventName;
-    
-    if(actions === 'ObjectCreated:Put' || actions === 'ObjectCreated:CompleteMultipartUpload' || actions === 'ObjectCreated:Post' || actions === 'ObjectCreated:Copy' )  {
-        
-        messageTitle = `${objectType} at bucket ${bucket}`;
-        messageLevel = "good";
-        filedValueContext = objectKey + " has been uploaded to bucket successfully on " + eventTime + "\n file size: " + objectSize + " " + objectUnit + "\n Link is here: " + `https://s3.console.aws.amazon.com/s3/object/4dpublic?region=us-west-2&prefix=${objectKey}`;
-    }
-    
-    var attachments = {
-       "attachments":[
+  const timezone = 'Asia/Istanbul';
+  const objectType = 'Upload';
+
+  const objectKey = event.Records[0].s3.object.key;
+  const bucket = event.Records[0].s3.bucket.name;
+  const eventTime = moment.tz(event.Records[0].eventTime, timezone).format('DD/MM/YYYY HH:mm:ss');
+
+  let objectSize = Number((event.Records[0].s3.object.size / 1024).toFixed(2));
+  let objectUnit = 'KB';
+
+  if (objectSize > 1024) {
+    objectSize = Number((objectSize / 1024).toFixed(2));
+    objectUnit = 'MB';
+  }
+
+  const actions = event.Records[0].eventName;
+  const supportedActions = [
+    'ObjectCreated:Put',
+    'ObjectCreated:CompleteMultipartUpload',
+    'ObjectCreated:Post',
+    'ObjectCreated:Copy',
+  ];
+
+  if (!supportedActions.includes(actions)) {
+    callback(null, `Skipped event: ${actions}`);
+    return;
+  }
+
+  const consoleLink = `https://s3.console.aws.amazon.com/s3/object/${bucket}?prefix=${objectKey}`;
+  const messageTitle = `${objectType} at bucket ${bucket}`;
+  const fieldValue =
+    `${objectKey} uploaded successfully on ${eventTime}\n` +
+    `File size: ${objectSize} ${objectUnit}\n` +
+    `Link: ${consoleLink}`;
+
+  const attachments = {
+    attachments: [
+      {
+        fallback: `New upload to ${bucket}`,
+        pretext: `New upload to ${bucket}`,
+        color: 'good',
+        fields: [
           {
-             "fallback": attachmentTitle,
-             "pretext": attachmentTitle,
-             "color": messageLevel,
-             "fields":[
-                {
-                   "title": messageTitle,
-                   "value": filedValueContext,
-                   "short": false
-                }
-             ]
-          }
-       ]
-    };
+            title: messageTitle,
+            value: fieldValue,
+            short: false,
+          },
+        ],
+      },
+    ],
+  };
 
+  const options = {
+    uri: reqURL,
+    method: 'POST',
+    json: attachments,
+  };
 
-
-    var options = {
-        uri: reqURL,
-        method: 'POST',
-        json: attachments
-    };
-
-    request.post(options, function (error, response, body) {
-        if (!error && response.statusCode == 200) {
-          console.log(body.id) 
-          console.log("body: " + body);
-          console.log("Post to slack error: " + error)
-        }
-    });
-    
-    console.log(event);
-    console.log(event.Records[0]);
-    
-    callback(null, messageTitle + ' Object Key:' + objectKey);
+  request.post(options, (error, response, body) => {
+    if (error) {
+      console.error('Slack request failed:', error);
+      callback(error);
+      return;
+    }
+    if (response.statusCode !== 200) {
+      console.error('Slack returned non-200:', response.statusCode, body);
+      callback(new Error(`Slack error: ${response.statusCode}`));
+      return;
+    }
+    console.log('Slack notification sent:', body);
+    callback(null, `${messageTitle} | Object: ${objectKey}`);
+  });
 };
